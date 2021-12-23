@@ -1,0 +1,235 @@
+options
+{
+}
+
+/* Generate UAFSTokenizer */
+PARSER_BEGIN(UATokenizer)
+import java.io.*;
+
+public class UATokenizer
+{
+  public static void main(String [] args) throws ParseException
+  {
+    int domaincount = 0;
+    int emailcount = 0;
+    int phonecount = 0;
+    int pricecount = 0;
+    int wordcount = 0;
+    int tokencount = 0;
+    int filecount = 0;
+    int subfoldercount = 0;
+    try
+    {
+      File f = new File(args [0]);
+      File [] FileList = f.listFiles();
+      BufferedInputStream bis = new BufferedInputStream(new FileInputStream(FileList [0].listFiles() [0].getPath()));
+      UATokenizer parser = new UATokenizer(bis);
+      BufferedOutputStream tokens = new BufferedOutputStream(new FileOutputStream("tokens.out"));
+      BufferedOutputStream emails = new BufferedOutputStream(new FileOutputStream("email.txt"));
+      BufferedOutputStream phones = new BufferedOutputStream(new FileOutputStream("phone.txt"));
+      BufferedOutputStream domains = new BufferedOutputStream(new FileOutputStream("domain.txt"));
+      BufferedOutputStream prices = new BufferedOutputStream(new FileOutputStream("price.txt"));
+      BufferedOutputStream words = new BufferedOutputStream(new FileOutputStream("word.txt"));
+      File subfolder = null;
+      for (File file : FileList)
+      {
+        File [] subfiles = file.listFiles();
+        for (File subfile : subfiles)
+        {
+          if (filecount % 10000 == 0)
+          {
+            subfolder = new File(args [1] + "/" + "sub" + String.format("%04d",subfoldercount));
+            subfolder.mkdir();
+            subfoldercount++;
+          }
+          filecount++;
+          bis = new BufferedInputStream(new FileInputStream(subfile.getPath()));
+          BufferedOutputStream bos1 = new BufferedOutputStream(new FileOutputStream(args [1] + "/" + subfolder.getName() + "/" + subfile.getName() + ".out"));
+          parser.ReInit(bis);
+          Token t = getNextToken();
+          while (t.kind != UATokenizer.EOF)
+          {
+            tokencount++;
+            byte [] b = String.format("%-10s : %s%n", UATokenizer.tokenImage[t.kind].toString(), t.image).getBytes();
+            bos1.write(b);
+            tokens.write(b);
+            b = String.format("%s%n", t.image).getBytes();
+            if (t.kind == UATokenizerConstants.WORD)
+            {
+              words.write(b);
+              wordcount++;
+            }
+            else if (t.kind == UATokenizerConstants.EMAIL)
+            {
+              emails.write(b);
+              emailcount++;
+            }
+            else if (t.kind == UATokenizerConstants.PHONENUMBER)
+            {
+              phones.write(b);
+              phonecount++;
+            }
+            else if (t.kind == UATokenizerConstants.DOMAIN)
+            {
+              domains.write(b);
+              domaincount++;
+            }
+            else if (t.kind == UATokenizerConstants.PRICE)
+            {
+              prices.write(b);
+              pricecount++;
+            }
+            t = parser.getNextToken();
+          }
+          bos1.close();
+          bis.close();
+        }
+      }
+      tokens.close();
+      words.close();
+      domains.close();
+      prices.close();
+      phones.close();
+      emails.close();
+      BufferedOutputStream summary = new BufferedOutputStream(new FileOutputStream("summary.txt"));
+      summary.write(("======= Project EWOK Tokenization Summary =======\n\n").getBytes());
+      summary.write(("Total Number of Tokens:                " + tokencount + "\n").getBytes());
+      summary.write(("Files Processed:                       " + filecount + "\n").getBytes());
+      summary.write(("Emails Found:                          " + emailcount + "\n").getBytes());
+      summary.write(("Prices Found:                          " + pricecount + "\n").getBytes());
+      summary.write(("Domains Found:                         " + domaincount + "\n").getBytes());
+      summary.write(("Words Found:                           " + wordcount + "\n").getBytes());
+      summary.write(("Phone Numbers Found:                   " + phonecount + "\n\n").getBytes());
+      summary.close();
+    }
+    catch (Exception ex)
+    {
+      ex.printStackTrace();
+    }
+    ;
+  }
+}
+
+PARSER_END(UATokenizer)
+
+TOKEN_MGR_DECLS :
+{
+  void CommonTokenAction(Token t)
+  {
+  /* System.out.println("Token : " + t.image); */
+  }
+}
+
+SKIP :
+{
+  " "
+| "\n"
+| "\t"
+| "\r"
+| < USELESSINFOTAGS :
+    (
+      (
+        "<" ("style" | "STYLE") (~[">"])* ">" (~[">"])+ ">"
+      )
+    |
+      (
+        "<" ("script" | "SCRIPT") (~[">"])* ">" (~[">"])+ ">"
+      )
+    ) >
+| < TAG :
+    (
+      "<" (~[">"])+ ">"
+    ) >
+| <  UNICODE :
+	(	  ~["\u0000"-"\u007F"]	)+ >
+| < CODEBLOCK :
+	"{"
+	(	  ~[ ]
+	)+
+	"}" >
+}
+
+/* JavaCC syntax */
+TOKEN :
+{
+  < WORD : (["a"-"z", "A"-"Z"]){1,15} >
+| < EMAIL :
+    ([ "a"-"z", "A"-"Z", "0"-"9", ".", "_", "-", "!", "#", "$", "%", "&", "'", "*", "?", 
+    "^", "=", "{", "|", "}", "~" ])+ "@"
+    (
+      ([ "a"-"z", "A"-"Z" ])+ "."
+    )+
+    ([ "a"-"z", "A"-"Z" ])+ >
+| < DOMAIN :
+    ([ "a"-"z", "A"-"Z" ])+ "."
+    (
+      ([ "a"-"z", "A"-"Z", "0"-"9" ])+ "."
+    )+
+    ([ "a"-"z", "A"-"Z" ])+ >
+| < PRICE :
+    "$" ([ "0"-"9" ])
+    {
+      1, 3
+    }
+    (
+      (",")? ([ "0"-"9" ])
+      {
+        3
+      }
+    )*
+    (
+      "." ([ "0"-"9" ])
+      {
+        1, 2
+      }
+    )? >
+| < PHONENUMBER :
+    (
+      ("+")? 
+      ([ "0"-"9" ])
+      {
+        1, 3
+      }
+      ([ " ", "-", ".", "\r" ])
+    )?
+    (
+      (
+        ("(") ([ "0"-"9" ])
+        {
+          3
+        }
+        (")")
+      )
+    | ([ "0"-"9" ])
+      {
+        3
+      }
+    )
+    ([ " ", "-", ".", "\r" ]) ([ "0"-"9" ])
+    {
+      3
+    }
+    ([ " ", "-", ".", "\r" ]) ([ "0"-"9" ])
+    {
+      4
+    }
+  >
+| < NUMBER :
+    ([ "0"-"9" ])
+    {
+      1, 3
+    }
+    (
+      (",")? ([ "0"-"9" ])
+      {
+        3
+      }
+    )*
+    (
+      "." ([ "0"-"9" ])
+      {
+        1,
+      }
+    )? >
+| < OTHER : ~[ ] >
+}
